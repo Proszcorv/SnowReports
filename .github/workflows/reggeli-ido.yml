@@ -1,0 +1,23 @@
+name: Reggeli időjárás
+ 
+on:
+  schedule:
+    # UTC-ben megadva: télen (CET) 06:00 UTC = 07:00 helyi idő.
+    - cron: "0 6 * * *"
+  workflow_dispatch: # kézi indítás az Actions fülön
+ 
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Értesítés küldése
+        env:
+          LAT: ${{ vars.LAT }}
+          LON: ${{ vars.LON }}
+          PLACE: ${{ vars.PLACE }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: python weather_alert.py
