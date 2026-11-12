@@ -1,30 +1,59 @@
-"""Reggeli fagy/hó összefoglaló: Open-Meteo (4 modell) -> ntfy.sh értesítés."""
+"""Reggeli fagy/hó összefoglaló: Open-Meteo (4 modell) -> ntfy.sh értesítés.
+
+Helyek megadása:
+  PLACES  = soronként egy hely, "Név;szélesség;hosszúság" (pl. "Telki;47.55;18.83")
+  vagy (egy helyhez) LAT, LON, PLACE
+PAGE_URL = a weboldalad címe (opcionális), az értesítésre kattintva ez nyílik meg.
+"""
 import json
 import os
 import sys
+import time
 import urllib.parse
 import urllib.request
 
 MODELS = ["ecmwf_ifs025", "gfs_seamless", "icon_seamless", "gem_seamless"]
-LAT = os.environ["LAT"]
-LON = os.environ["LON"]
-PLACE = os.environ.get("PLACE", "Helyem")
 TOPIC = os.environ["NTFY_TOPIC"]
+PAGE_URL = (os.environ.get("PAGE_URL") or "").strip()
 
 
-def get_json(url, data=None):
-    req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+def get_json(url, data=None, attempts=4):
+    """Átmeneti hálózati hibánál (időtúllépés, TLS) többször újrapróbálkozik."""
+    last = None
+    for i in range(attempts):
+        try:
+            req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=20) as r:
+                return json.load(r)
+        except Exception as e:
+            last = e
+            print(f"Próbálkozás {i + 1}/{attempts} sikertelen: {e}", file=sys.stderr)
+            if i < attempts - 1:
+                time.sleep(5 * (i + 1))
+    raise last
 
 
 def hu(n, d=0):
     return str(round(n, d)).replace(".", ",")
 
 
-def main():
+def parse_places():
+    raw = (os.environ.get("PLACES") or "").replace("|", "\n")
+    places = []
+    for line in raw.splitlines():
+        parts = [p.strip() for p in line.split(";")]
+        if len(parts) == 3 and all(parts):
+            places.append((parts[0], parts[1].replace(",", "."), parts[2].replace(",", ".")))
+    if not places and os.environ.get("LAT") and os.environ.get("LON"):
+        places.append((os.environ.get("PLACE") or "Helyem", os.environ["LAT"], os.environ["LON"]))
+    if not places:
+        raise SystemExit("Nincs megadott hely (PLACES vagy LAT/LON).")
+    return places
+
+
+def send_for(name, lat, lon):
     q = urllib.parse.urlencode({
-        "latitude": LAT, "longitude": LON,
+        "latitude": lat, "longitude": lon,
         "daily": "temperature_2m_min,precipitation_sum,snowfall_sum",
         "models": ",".join(MODELS), "forecast_days": 14, "timezone": "auto",
     })
@@ -70,18 +99,29 @@ def main():
         tags.append("snowflake")
     payload = {
         "topic": TOPIC,
-        "title": f"{PLACE}: reggeli időjárás",
+        "title": f"{name}: reggeli időjárás",
         "message": "\n".join(lines),
         "tags": tags or ["sunny"],
         "priority": 4 if snowy(t) else 3,
     }
+    if PAGE_URL:
+        sep = "&" if "?" in PAGE_URL else "?"
+        payload["click"] = PAGE_URL + sep + urllib.parse.urlencode({"lat": lat, "lon": lon, "name": name})
     get_json("https://ntfy.sh/", json.dumps(payload).encode())
-    print("Elküldve:\n" + payload["message"])
+    print(f"Elküldve ({name}):\n" + payload["message"])
+
+
+def main():
+    failed = False
+    for name, lat, lon in parse_places():
+        try:
+            send_for(name, lat, lon)
+        except Exception as e:
+            failed = True
+            print(f"Hiba ({name}):", e, file=sys.stderr)
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        print("Hiba:", e, file=sys.stderr)
-        sys.exit(1)
+    main()
