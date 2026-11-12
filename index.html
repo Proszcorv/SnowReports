@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fagy és hó figyelő</title>
+<style>
+:root{--bg:#eef3f6;--card:#fff;--ink:#14232e;--mute:#5d7180;--line:#d6e0e7;--frost:#1f5f8f;--frostbg:#dcebf5;--snow:#6a4fb3;--snowbg:#e9e4f7;--warm:#8a6a2f}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1a22;--card:#16252f;--ink:#e6eef3;--mute:#8da2b1;--line:#27394630;--frost:#7ec0ef;--frostbg:#183a52;--snow:#b9a6f0;--snowbg:#2b2548;--warm:#d9b46a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px 40px}
+main{max-width:640px;margin:0 auto}
+h1{font:600 28px/1.15 Georgia,"Times New Roman",serif;margin:8px 0 4px}
+.sub{color:var(--mute);margin:0 0 18px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+input,button,select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--card);color:var(--ink)}
+input[type=search]{flex:1;min-width:180px}
+button{cursor:pointer;background:var(--frost);color:#fff;border-color:transparent}
+button.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
+:focus-visible{outline:3px solid var(--snow);outline-offset:2px}
+#results{margin-top:8px;display:flex;flex-direction:column;gap:6px}
+#results button{text-align:left;background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.today{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin:18px 0}
+.today .place{color:var(--mute);margin:0}
+.today .big{font:600 22px/1.3 Georgia,serif;margin:6px 0 0}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.chip{border-radius:999px;padding:3px 10px;font-size:14px;background:var(--line);color:var(--ink)}
+.chip.f{background:var(--frostbg);color:var(--frost)}
+.chip.s{background:var(--snowbg);color:var(--snow)}
+.days{background:var(--card);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.day{display:grid;grid-template-columns:76px 1fr auto;gap:10px;align-items:center;padding:11px 14px;border-top:1px solid var(--line)}
+.day:first-child{border-top:0}
+.day.frost{background:linear-gradient(90deg,var(--frostbg),transparent 70%)}
+.day.snow{box-shadow:inset 4px 0 0 var(--snow)}
+.d{font-weight:600}
+.d small{display:block;color:var(--mute);font-weight:400}
+.t b{font-size:18px}
+.t span{color:var(--mute);font-size:14px;margin-left:6px}
+.p{text-align:right;font-size:14px;color:var(--mute)}
+.p b{color:var(--ink)}
+.set{margin-top:18px;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px}
+.set h2{font:600 17px Georgia,serif;margin:0 0 8px}
+.note{color:var(--mute);font-size:13px;margin:8px 0 0}
+.err{color:#b3261e;margin-top:10px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>Fagy és hó figyelő</h1>
+<p class="sub">Több időjárási modell egyszerre: lesz-e ma fagy, mennyi csapadék jön, és havazhat-e.</p>
+
+<form class="row" id="f">
+  <input type="search" id="q" placeholder="Település neve (pl. Budaörs)" aria-label="Település" required>
+  <button>Keresés</button>
+</form>
+<div id="results"></div>
+<p class="err" id="err" hidden></p>
+
+<section id="view" hidden>
+  <div class="today" id="today"></div>
+  <div class="days" id="days"></div>
+</section>
+</main>
+
+<script>
+const MODELS=['ecmwf_ifs025','gfs_seamless','icon_seamless','gem_seamless'];
+const $=s=>document.querySelector(s);
+const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let place=store.get('place');
+let summary=null;
+
+function showErr(m){const e=$('#err');e.textContent=m;e.hidden=!m}
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+const fmt=(n,d=0)=>(Math.round(n*10**d)/10**d).toString().replace('.',',');
+
+$('#f').addEventListener('submit',async e=>{
+  e.preventDefault();showErr('');
+  try{
+    const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?count=5&language=hu&name='+encodeURIComponent($('#q').value));
+    const j=await r.json();
+    const box=$('#results');box.innerHTML='';
+    if(!j.results){showErr('Nem találtam ilyen települést. Próbáld ékezetekkel, pontos névvel.');return}
+    j.results.forEach(x=>{
+      const b=document.createElement('button');b.type='button';
+      b.textContent=[x.name,x.admin1,x.country].filter(Boolean).join(', ');
+      b.onclick=()=>{place={name:x.name,lat:x.latitude,lon:x.longitude};store.set('place',place);box.innerHTML='';load()};
+      box.appendChild(b);
+    });
+  }catch(err){showErr('A keresés nem sikerült. Ellenőrizd az internetkapcsolatot.')}
+});
+
+async function load(){
+  if(!place)return;showErr('');
+  try{
+    const u=`https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}&daily=temperature_2m_min,precipitation_sum,snowfall_sum&models=${MODELS.join(',')}&forecast_days=14&timezone=auto`;
+    const j=await (await fetch(u)).json();
+    const d=j.daily;if(!d)throw new Error();
+    const days=d.time.map((t,i)=>{
+      const get=k=>MODELS.map(m=>d[`${k}_${m}`]?.[i]).filter(v=>v!=null);
+      const mins=get('temperature_2m_min'),pr=get('precipitation_sum'),sn=get('snowfall_sum');
+      return{t,n:mins.length,min:mins.length?avg(mins):null,lo:Math.min(...mins),hi:Math.max(...mins),
+        frostModels:mins.filter(v=>v<0).length,
+        precip:pr.length?avg(pr):null,
+        snowModels:sn.filter(v=>v>=0.2).length,snowN:sn.length,snowCm:sn.length?avg(sn):0};
+    });
+    render(days);
+  }catch(err){showErr('Nem sikerült lekérni az előrejelzést. Próbáld újra később.')}
+}
+
+function render(days){
+  $('#view').hidden=false;
+  const z=days[0];
+  const frost=z.min!==null&&z.min<0;
+  const snowy=z.snowN&&z.snowModels>=Math.ceil(z.snowN/2);
+  const nextSnow=days.find((x,i)=>i>0&&x.snowN&&x.snowModels>=Math.ceil(x.snowN/2));
+  const head=`${frost?'Ma fagy lesz':'Ma nem lesz fagy'}: ${fmt(z.min)} °C minimum`;
+  const sub=snowy?'Havazás valószínű.':(z.precip>=0.2?'Csapadék várható, de hó nem valószínű.':'Érdemi csapadék nem várható.');
+  $('#today').innerHTML=`<p class="place">${place.name}</p>
+    <p class="big">${head}</p>
+    <p style="margin:6px 0 0">${sub} ${nextSnow?'Következő hónap: '+dayName(nextSnow.t)+'.':'A következő 2 hétben nem látszik többségi havazás.'}</p>
+    <div class="chips">
+      <span class="chip ${frost?'f':''}">${z.frostModels}/${z.n} modell fagyot mutat</span>
+      <span class="chip">Csapadék: ${fmt(z.precip,1)} mm</span>
+      <span class="chip ${snowy?'s':''}">Hó: ${z.snowModels}/${z.snowN} modell</span>
+    </div>`;
+  $('#days').innerHTML=days.map(x=>{
+    const f=x.min!==null&&x.min<0,s=x.snowN&&x.snowModels>=Math.ceil(x.snowN/2);
+    return `<div class="day ${f?'frost':''} ${s?'snow':''}">
+      <div class="d">${dayName(x.t,true)}<small>${dayName(x.t,false,true)}</small></div>
+      <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}-${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
+      <div class="p"><b>${fmt(x.precip,1)} mm</b><br>${x.snowModels>0?'hó '+x.snowModels+'/'+x.snowN+' modell':'nincs hó'}</div>
+    </div>`}).join('');
+  summary=`${place.name}: ma min. ${fmt(z.min)} °C, csapadék ${fmt(z.precip,1)} mm, `+(snowy?'havazás valószínű.':z.snowModels>0?'hó lehetséges ('+z.snowModels+'/'+z.snowN+' modell).':'hó nem várható.');
+  maybeNotify();
+}
+function dayName(t,short,date){const d=new Date(t+'T12:00');
+  return date?d.toLocaleDateString('hu-HU',{month:'short',day:'numeric'}):d.toLocaleDateString('hu-HU',{weekday:short?'short':'long'})}
+
+function notify(text){
+  if('Notification' in window&&Notification.permission==='granted')new Notification('Reggeli időjárás',{body:text});
+  else showErr('Az értesítés nincs engedélyezve.');
+}
+function maybeNotify(){
+  const on=store.get('notify');if(!on||!summary)return;
+  const now=new Date(),today=now.toISOString().slice(0,10);
+  const [h,m]=($('#tm').value||'07:00').split(':').map(Number);
+  if(store.get('last')!==today&&(now.getHours()>h||(now.getHours()===h&&now.getMinutes()>=m))){
+    notify(summary);store.set('last',today);
+  }
+}
+$('#en').onclick=async()=>{
+  if(!('Notification' in window)){showErr('Ez a böngésző nem támogatja az értesítést.');return}
+  const p=await Notification.requestPermission();
+  store.set('notify',p==='granted');
+  $('#en').textContent=p==='granted'?'Értesítés bekapcsolva':'Értesítés engedélyezése';
+  store.set('time',$('#tm').value);maybeNotify();
+};
+$('#tm').onchange=()=>{store.set('time',$('#tm').value);maybeNotify()};
+$('#test').onclick=()=>summary?notify(summary):showErr('Előbb válassz települést.');
+
+$('#tm').value=store.get('time')||'07:00';
+if(store.get('notify'))$('#en').textContent='Értesítés bekapcsolva';
+if(place)load();
+</script>
+</body>
+</html>
