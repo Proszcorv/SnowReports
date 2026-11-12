@@ -19,7 +19,6 @@ jobs:
           LAT: ${{ vars.LAT }}
           LON: ${{ vars.LON }}
           PLACE: ${{ vars.PLACE }}
-          PLACES: ${{ vars.PLACES }}
           PAGE_URL: ${{ vars.PAGE_URL }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: python weather_alert.py
