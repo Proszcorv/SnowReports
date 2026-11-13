@@ -2,8 +2,7 @@ name: Reggeli időjárás
  
 on:
   schedule:
-    # UTC-ben megadva: télen (CET) 06:00 UTC = 07:00 helyi idő.
-    - cron: "0 6 * * *"
+    - cron: "30 00 * * *"
   workflow_dispatch: # kézi indítás az Actions fülön
  
 jobs:
