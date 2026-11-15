@@ -128,7 +128,7 @@ function render(days){
     const f=x.min!==null&&x.min<0,s=x.snowN&&x.snowModels>=Math.ceil(x.snowN/2);
     return `<div class="day ${f?'frost':''} ${s?'snow':''}">
       <div class="d">${dayName(x.t,true)}<small>${dayName(x.t,false,true)}</small></div>
-      <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}-${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
+      <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}_${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
       <div class="p"><b>${fmt(x.precip,1)} mm</b><br>${x.snowModels>0?'hó '+x.snowModels+'/'+x.snowN+' modell':'nincs hó'}</div>
     </div>`}).join('');
   summary=`${place.name}: ma min. ${fmt(z.min)} °C, csapadék ${fmt(z.precip,1)} mm, `+(snowy?'havazás valószínű.':z.snowModels>0?'hó lehetséges ('+z.snowModels+'/'+z.snowN+' modell).':'hó nem várható.');
