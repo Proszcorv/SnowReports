@@ -158,7 +158,7 @@ function render(days){
   const sub=snowy?'Havazás valószínű.':(z.precip>=0.2?'Csapadék várható, de hó nem valószínű.':'Érdemi csapadék nem várható.');
   $('#today').innerHTML=`<p class="place">${esc(place.name)}</p>
     <p class="big">${head}</p>
-    <p style="margin:6px 0 0">${sub} ${nextSnow?'Következő hónap: '+dayName(nextSnow.t)+'.':'A következő 2 hétben nem látszik többségi havazás.'}</p>
+    <p style="margin:6px 0 0">${sub} ${nextSnow?'Következő havazás: '+dayName(nextSnow.t)+'.':'A következő 2 hétben nem látszik többségi havazás.'}</p>
     <div class="chips">
       <span class="chip ${frost?'f':''}">${z.frostModels}/${z.n} modell fagyot mutat</span>
       <span class="chip">Csapadék: ${fmt(z.precip,1)} mm</span>
@@ -168,7 +168,7 @@ function render(days){
     const f=x.min!==null&&x.min<0,s=x.snowN&&x.snowModels>=Math.ceil(x.snowN/2);
     return `<div class="day ${f?'frost':''} ${s?'snow':''}">
       <div class="d">${dayName(x.t,true)}<small>${dayName(x.t,false,true)}</small></div>
-      <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}…${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
+      <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}_${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
       <div class="p"><b>${fmt(x.precip,1)} mm</b><br>${x.snowModels>0?(x.snowCm>=0.1?'❄ ~'+fmt(x.snowCm,1)+' cm<br>':'')+'hó '+x.snowModels+'/'+x.snowN+' modell':'nincs hó'}</div>
     </div>`}).join('');
 }
