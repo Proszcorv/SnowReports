@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fagy és hó figyelő</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f5f8f'/%3E%3Cg stroke='%23fff' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round' fill='none'%3E%3Cg id='a'%3E%3Cpath d='M32 10v44M25 16l7 6 7-6M25 48l7-6 7 6'/%3E%3C/g%3E%3Cuse href='%23a' transform='rotate(60 32 32)'/%3E%3Cuse href='%23a' transform='rotate(120 32 32)'/%3E%3C/g%3E%3C/svg%3E">
 <style>
 :root{--bg:#eef3f6;--card:#fff;--ink:#14232e;--mute:#5d7180;--line:#d6e0e7;--frost:#1f5f8f;--frostbg:#dcebf5;--snow:#6a4fb3;--snowbg:#e9e4f7;--warm:#8a6a2f}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1a22;--card:#16252f;--ink:#e6eef3;--mute:#8da2b1;--line:#27394630;--frost:#7ec0ef;--frostbg:#183a52;--snow:#b9a6f0;--snowbg:#2b2548;--warm:#d9b46a}}
@@ -43,9 +44,43 @@ button.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
 .note{color:var(--mute);font-size:13px;margin:8px 0 0}
 .err{color:#b3261e;margin-top:10px}
 [hidden]{display:none!important}
+/* óránkénti nézet */
+.hourly{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 0 6px;margin:0 0 18px}
+.hhead{padding:0 16px}
+.hhead h2{font:600 17px Georgia,serif;margin:0}
+.hhead p{margin:2px 0 10px;color:var(--mute);font-size:14px}
+.hscroll{display:flex;gap:6px;overflow-x:auto;padding:4px 16px 8px;scroll-snap-type:x proximity;position:relative;-webkit-overflow-scrolling:touch}
+.hr{flex:0 0 66px;scroll-snap-align:center;text-align:center;border-radius:12px;padding:8px 2px;display:flex;flex-direction:column;align-items:center;gap:4px}
+.hr.now{background:var(--frostbg);outline:2px solid var(--frost)}
+.hr.fr .tt{color:var(--frost)}
+.hh{font-size:13px;color:var(--mute)}
+.ic{font-size:28px;line-height:1.1}
+.tt{font-weight:700;font-size:17px}
+.pb{width:12px;height:44px;border-radius:6px;background:var(--line);display:flex;align-items:flex-end;overflow:hidden}
+.pb i{display:block;width:100%;background:var(--frost);border-radius:6px}
+.pb.sn i{background:var(--snow)}
+.pm{font-size:12px}
+.ps{font-size:12px;color:var(--mute)}
+.hr.sn .ps{color:var(--snow);font-weight:600}
+.hnote{color:var(--mute);font-size:12px;margin:4px 16px 8px}
+.hscroll::-webkit-scrollbar{height:8px}
+.hscroll::-webkit-scrollbar-track{background:var(--frostbg);border-radius:8px;margin:0 16px}
+.hscroll::-webkit-scrollbar-thumb{background:var(--frost);border-radius:8px}
+.hscroll::-webkit-scrollbar-thumb:hover{background:var(--snow)}
+@supports not selector(::-webkit-scrollbar){.hscroll{scrollbar-width:thin;scrollbar-color:var(--frost) var(--frostbg)}}
+/* hó- és fagyeffekt */
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+main{position:relative;z-index:1}
+@media (max-width:700px){#fx{z-index:5;opacity:.75}}
+body[data-fx="frost"]::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:linear-gradient(90deg,rgba(150,205,240,.4),transparent 22%,transparent 78%,rgba(150,205,240,.4))}
+@media (prefers-color-scheme:dark){
+  body[data-fx="frost"]::before{background:linear-gradient(90deg,rgba(126,192,239,.25),transparent 22%,transparent 78%,rgba(126,192,239,.25))}
+}
 </style>
 </head>
 <body>
+<canvas id="fx" aria-hidden="true"></canvas>
 <main>
 <h1>Fagy és hó figyelő</h1>
 <p class="sub">Több időjárási modell egyszerre: lesz-e ma fagy, mennyi csapadék jön, és havazhat-e.</p>
@@ -59,8 +94,10 @@ button.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
 
 <section id="view" hidden>
   <div class="today" id="today"></div>
+  <div class="hourly" id="hourly" hidden></div>
   <div class="days" id="days"></div>
 </section>
+
 </main>
 
 <script>
@@ -68,7 +105,10 @@ const MODELS=['ecmwf_ifs025','gfs_seamless','icon_seamless','gem_seamless'];
 const $=s=>document.querySelector(s);
 const store={get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 let place=store.get('place');
-let summary=null;
+// Az értesítésben lévő link (?lat=..&lon=..&name=..) ezt a helyet nyitja meg
+(function(){const qp=new URLSearchParams(location.search);const la=parseFloat(qp.get('lat')),lo=parseFloat(qp.get('lon'));
+  if(isFinite(la)&&isFinite(lo)){place={name:(qp.get('name')||'Helyem').slice(0,60),lat:la,lon:lo};store.set('place',place)}})();
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 function showErr(m){const e=$('#err');e.textContent=m;e.hidden=!m}
 const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
@@ -104,7 +144,7 @@ async function load(){
         precip:pr.length?avg(pr):null,
         snowModels:sn.filter(v=>v>=0.2).length,snowN:sn.length,snowCm:sn.length?avg(sn):0};
     });
-    render(days);
+    render(days);loadHourly();
   }catch(err){showErr('Nem sikerült lekérni az előrejelzést. Próbáld újra később.')}
 }
 
@@ -116,51 +156,179 @@ function render(days){
   const nextSnow=days.find((x,i)=>i>0&&x.snowN&&x.snowModels>=Math.ceil(x.snowN/2));
   const head=`${frost?'Ma fagy lesz':'Ma nem lesz fagy'}: ${fmt(z.min)} °C minimum`;
   const sub=snowy?'Havazás valószínű.':(z.precip>=0.2?'Csapadék várható, de hó nem valószínű.':'Érdemi csapadék nem várható.');
-  $('#today').innerHTML=`<p class="place">${place.name}</p>
+  $('#today').innerHTML=`<p class="place">${esc(place.name)}</p>
     <p class="big">${head}</p>
     <p style="margin:6px 0 0">${sub} ${nextSnow?'Következő hónap: '+dayName(nextSnow.t)+'.':'A következő 2 hétben nem látszik többségi havazás.'}</p>
     <div class="chips">
       <span class="chip ${frost?'f':''}">${z.frostModels}/${z.n} modell fagyot mutat</span>
       <span class="chip">Csapadék: ${fmt(z.precip,1)} mm</span>
-      <span class="chip ${snowy?'s':''}">Hó: ${z.snowModels}/${z.snowN} modell</span>
+      <span class="chip ${snowy?'s':''}">Hó: ${z.snowModels}/${z.snowN} modell${z.snowCm>=0.1?' · ~'+fmt(z.snowCm,1)+' cm':''}</span>
     </div>`;
   $('#days').innerHTML=days.map(x=>{
     const f=x.min!==null&&x.min<0,s=x.snowN&&x.snowModels>=Math.ceil(x.snowN/2);
     return `<div class="day ${f?'frost':''} ${s?'snow':''}">
       <div class="d">${dayName(x.t,true)}<small>${dayName(x.t,false,true)}</small></div>
-      <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}-${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
-      <div class="p"><b>${fmt(x.precip,1)} mm</b><br>${x.snowModels>0?'hó '+x.snowModels+'/'+x.snowN+' modell':'nincs hó'}</div>
+      <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}…${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
+      <div class="p"><b>${fmt(x.precip,1)} mm</b><br>${x.snowModels>0?(x.snowCm>=0.1?'❄ ~'+fmt(x.snowCm,1)+' cm<br>':'')+'hó '+x.snowModels+'/'+x.snowN+' modell':'nincs hó'}</div>
     </div>`}).join('');
-  summary=`${place.name}: ma min. ${fmt(z.min)} °C, csapadék ${fmt(z.precip,1)} mm, `+(snowy?'havazás valószínű.':z.snowModels>0?'hó lehetséges ('+z.snowModels+'/'+z.snowN+' modell).':'hó nem várható.');
-  maybeNotify();
 }
 function dayName(t,short,date){const d=new Date(t+'T12:00');
   return date?d.toLocaleDateString('hu-HU',{month:'short',day:'numeric'}):d.toLocaleDateString('hu-HU',{weekday:short?'short':'long'})}
 
-function notify(text){
-  if('Notification' in window&&Notification.permission==='granted')new Notification('Reggeli időjárás',{body:text});
-  else showErr('Az értesítés nincs engedélyezve.');
+// ===== Óránkénti nézet =====
+function hIcon(code,day,sn){
+  if(sn>=0.5)return{e:'❄️',t:'Havazás'};
+  if(sn>=0.1)return{e:'🌨️',t:'Hószállingózás'};
+  const d=!!day;
+  if(code===0)return d?{e:'☀️',t:'Derült'}:{e:'🌙',t:'Derült éjszaka'};
+  if(code===1)return d?{e:'🌤️',t:'Enyhén felhős'}:{e:'🌙',t:'Enyhén felhős'};
+  if(code===2)return d?{e:'⛅',t:'Részben felhős'}:{e:'☁️',t:'Részben felhős'};
+  if(code===3)return{e:'☁️',t:'Borult'};
+  if(code===45||code===48)return{e:'🌫️',t:'Köd'};
+  if(code>=51&&code<=55)return{e:'🌦️',t:'Szitálás'};
+  if(code===56||code===57||code===66||code===67)return{e:'🧊',t:'Ónos eső'};
+  if(code===61||code===80)return{e:'🌦️',t:'Gyenge eső'};
+  if(code>=61&&code<=65||code===81||code===82)return{e:'🌧️',t:'Eső'};
+  if(code>=71&&code<=77||code===85||code===86)return{e:'🌨️',t:'Havazás'};
+  if(code>=95)return{e:'⛈️',t:'Zivatar'};
+  return{e:'☁️',t:'Felhős'};
 }
-function maybeNotify(){
-  const on=store.get('notify');if(!on||!summary)return;
-  const now=new Date(),today=now.toISOString().slice(0,10);
-  const [h,m]=($('#tm').value||'07:00').split(':').map(Number);
-  if(store.get('last')!==today&&(now.getHours()>h||(now.getHours()===h&&now.getMinutes()>=m))){
-    notify(summary);store.set('last',today);
+function renderHourly(h,off){
+  const nowH=new Date(Date.now()+off*1000).getUTCHours();
+  const maxP=Math.max(1,...h.precipitation.map(v=>v||0));
+  let tot=0,tsn=0;
+  const temps=h.temperature_2m.filter(v=>v!=null);
+  const cards=h.time.map((t,i)=>{
+    const hr=+t.slice(11,13),tmp=h.temperature_2m[i],p=h.precipitation[i]||0,sn=h.snowfall[i]||0;
+    const pp=h.precipitation_probability?h.precipitation_probability[i]:null;
+    tot+=p;tsn+=sn;
+    const ic=hIcon(h.weather_code[i],h.is_day[i],sn);
+    const bar=Math.round(Math.min(1,p/maxP)*100);
+    return `<div class="hr${hr===nowH?' now':''}${tmp<0?' fr':''}${sn>=0.1?' sn':''}"${hr===nowH?' id="nowcard"':''}>
+      <div class="hh">${String(hr).padStart(2,'0')}:00</div>
+      <div class="ic" title="${ic.t}" aria-label="${ic.t}">${ic.e}</div>
+      <div class="tt">${fmt(tmp)}°</div>
+      <div class="pb${sn>=0.1?' sn':''}"><i style="height:${bar}%"></i></div>
+      <div class="pm">${p>=0.05?fmt(p,1)+' mm':'–'}</div>
+      <div class="ps">${sn>=0.1?fmt(sn,1)+' cm hó':(pp!=null?pp+'%':'')}</div>
+    </div>`}).join('');
+  const sum=`Min ${fmt(Math.min(...temps))}° · Max ${fmt(Math.max(...temps))}° · csapadék összesen ${fmt(tot,1)} mm`+(tsn>=0.1?` · hó kb. ${fmt(tsn,1)} cm`:'');
+  const box=$('#hourly');
+  box.innerHTML=`<div class="hhead"><h2>Ma óránként</h2><p>${sum}</p></div>
+    <div class="hscroll" id="hscroll">${cards}</div>
+    <p class="hnote">A csapadék mm az olvasztott víz mennyisége (eső vagy hó). Hónál a hóréteg vastagsága ennél nagyobb, ezt a „cm hó” sor mutatja.</p>`;
+  box.hidden=false;
+  const n=$('#nowcard'),s=$('#hscroll');
+  if(n)s.scrollLeft=n.offsetLeft-s.clientWidth/2+n.offsetWidth/2;
+}
+
+// ===== Hó- és fagyeffekt (háttér) =====
+const FXCFG={
+  light:{n:40,vy:[0.5,1.1],r:[1.2,3.0],wind:0.15,haze:0},
+  snow:{n:110,vy:[0.9,2.0],r:[1.4,3.8],wind:0.45,haze:0},
+  storm:{n:260,vy:[4,8],r:[1.1,3.2],wind:3.4,haze:0.08},
+  frost:{n:90}
+};
+const FX={c:null,x:null,mode:'none',p:[],w:0,h:0,t:0,run:false,dpr:1};
+const rnd=(a,b)=>a+Math.random()*(b-a);
+function fxSize(){
+  FX.dpr=Math.min(2,devicePixelRatio||1);
+  FX.w=innerWidth;FX.h=innerHeight;
+  FX.c.width=FX.w*FX.dpr;FX.c.height=FX.h*FX.dpr;
+  FX.x.setTransform(FX.dpr,0,0,FX.dpr,0,0);
+}
+function fxInit(){
+  if(FX.c)return;
+  FX.c=document.getElementById('fx');FX.x=FX.c.getContext('2d');
+  addEventListener('resize',fxSize);fxSize();
+}
+function fxMake(){
+  const m=FX.mode,c=FXCFG[m];FX.p=[];
+  if(!c)return;
+  for(let i=0;i<c.n;i++){
+    if(m==='frost'){const side=Math.max(0,(FX.w-680)/2),left=Math.random()<0.5;FX.p.push({x:side>40?(left?rnd(0,side):rnd(FX.w-side,FX.w)):rnd(0,FX.w),y:rnd(0,FX.h),r:rnd(3,8),ph:rnd(0,6.28),sp:rnd(0.6,1.8)});continue}
+    const k=Math.random();
+    FX.p.push({x:rnd(-50,FX.w+50),y:rnd(-FX.h,FX.h),r:c.r[0]+k*(c.r[1]-c.r[0]),vy:c.vy[0]+k*(c.vy[1]-c.vy[0]),a:rnd(0.45,0.95),ph:rnd(0,6.28),sw:rnd(0.5,1.5)});
   }
 }
-$('#en').onclick=async()=>{
-  if(!('Notification' in window)){showErr('Ez a böngésző nem támogatja az értesítést.');return}
-  const p=await Notification.requestPermission();
-  store.set('notify',p==='granted');
-  $('#en').textContent=p==='granted'?'Értesítés bekapcsolva':'Értesítés engedélyezése';
-  store.set('time',$('#tm').value);maybeNotify();
-};
-$('#tm').onchange=()=>{store.set('time',$('#tm').value);maybeNotify()};
-$('#test').onclick=()=>summary?notify(summary):showErr('Előbb válassz települést.');
+function fxFrame(){
+  if(FX.mode==='none'){FX.run=false;FX.x.clearRect(0,0,FX.w,FX.h);return}
+  FX.t+=0.016;
+  const x=FX.x,m=FX.mode,c=FXCFG[m],dark=matchMedia('(prefers-color-scheme: dark)').matches;
+  x.clearRect(0,0,FX.w,FX.h);
+  if(m==='frost'){
+    for(const s of FX.p){
+      const a=(Math.sin(FX.t*s.sp+s.ph)+1)/2;if(a<0.15)continue;
+      x.strokeStyle=(dark?'rgba(190,230,255,':'rgba(60,130,185,')+(a*0.8).toFixed(2)+')';
+      x.lineWidth=1.2;x.beginPath();
+      x.moveTo(s.x-s.r,s.y);x.lineTo(s.x+s.r,s.y);x.moveTo(s.x,s.y-s.r);x.lineTo(s.x,s.y+s.r);x.stroke();
+    }
+  }else{
+    const gust=m==='storm'?0.65+0.35*Math.sin(FX.t*0.5)+0.25*Math.sin(FX.t*1.7):1;
+    if(c.haze){x.fillStyle=(dark?'rgba(220,235,250,':'rgba(140,175,205,')+(c.haze*gust).toFixed(3)+')';x.fillRect(0,0,FX.w,FX.h)}
+    const col=dark?'255,255,255':'105,160,200';
+    for(const p of FX.p){
+      const vx=c.wind*gust*(0.6+p.r/6)+(m==='storm'?0:Math.sin(FX.t*p.sw+p.ph)*0.35);
+      p.x+=vx;p.y+=p.vy;
+      if(p.y>FX.h+10){p.y=-10;p.x=rnd(-50,FX.w+50)}
+      if(p.x>FX.w+30)p.x=-30;else if(p.x<-30)p.x=FX.w+30;
+      if(m==='storm'){
+        x.strokeStyle=`rgba(${col},${p.a.toFixed(2)})`;x.lineWidth=p.r*0.8;
+        x.beginPath();x.moveTo(p.x,p.y);x.lineTo(p.x-vx*3,p.y-p.vy*3);x.stroke();
+      }else if(p.r>3.1){
+        x.strokeStyle=`rgba(${col},${p.a.toFixed(2)})`;x.lineWidth=1.2;x.beginPath();
+        for(let k=0;k<3;k++){const an=k*Math.PI/3+p.ph*0.2,dx=Math.cos(an)*p.r*1.5,dy=Math.sin(an)*p.r*1.5;x.moveTo(p.x-dx,p.y-dy);x.lineTo(p.x+dx,p.y+dy)}
+        x.stroke();
+      }else{
+        x.fillStyle=`rgba(${col},${p.a.toFixed(2)})`;x.beginPath();x.arc(p.x,p.y,p.r,0,6.283);x.fill();
+      }
+    }
+  }
+  requestAnimationFrame(fxFrame);
+}
+function setFx(mode){
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)mode='none';
+  fxInit();
+  if(mode===FX.mode&&FX.run)return;
+  FX.mode=mode;document.body.dataset.fx=mode;fxMake();
+  if(mode!=='none'&&!FX.run){FX.run=true;requestAnimationFrame(fxFrame)}
+  if(mode==='none')FX.x.clearRect(0,0,FX.w,FX.h);
+}
+// Az aktuális óra és a következő 2 óra alapján dönt az erősségről
+function fxFromHourly(h,off){
+  const nowH=new Date(Date.now()+off*1000).getUTCHours();
+  let s=0,g=0;
+  for(let i=nowH;i<Math.min(nowH+3,h.time.length);i++){
+    s=Math.max(s,h.snowfall[i]||0);
+    g=Math.max(g,(h.wind_gusts_10m&&h.wind_gusts_10m[i])||0);
+  }
+  const t=h.temperature_2m[nowH];
+  let m='none';
+  if(s>=1||(s>=0.4&&g>=50))m='storm';
+  else if(s>=0.3)m='snow';
+  else if(s>=0.05)m='light';
+  else if(t!=null&&t<0)m='frost';
+  const f=new URLSearchParams(location.search).get('fx');
+  if(f&&(FXCFG[f]||f==='none'))m=f;
+  setFx(m);
+  return m;
+}
 
-$('#tm').value=store.get('time')||'07:00';
-if(store.get('notify'))$('#en').textContent='Értesítés bekapcsolva';
+async function loadHourly(){
+  const box=$('#hourly');
+  try{
+    const u=`https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}&hourly=temperature_2m,precipitation,snowfall,precipitation_probability,weather_code,is_day,wind_gusts_10m&forecast_days=1&timezone=auto`;
+    const j=await (await fetch(u)).json();
+    if(!j.hourly)throw new Error(j.reason||'nincs óránkénti adat');
+    renderHourly(j.hourly,j.utc_offset_seconds||0);
+    try{fxFromHourly(j.hourly,j.utc_offset_seconds||0)}catch(e2){console.warn('Effekt hiba:',e2)}
+  }catch(e){
+    try{setFx('none')}catch(_){}
+    box.hidden=false;
+    box.innerHTML='<p class="hnote" style="padding:0 16px">Az óránkénti adat most nem érhető el. ('+esc(e.message)+')</p>';
+  }
+}
+
 if(place)load();
 </script>
 </body>
