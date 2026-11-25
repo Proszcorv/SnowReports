@@ -137,7 +137,7 @@ function render(days){
   const sub=snowy?'Havazás valószínű.':(z.precip>=0.2?'Csapadék várható, de hó nem valószínű.':'Érdemi csapadék nem várható.');
   $('#today').innerHTML=`<p class="place">${place.name}</p>
     <p class="big">${head}</p>
-    <p style="margin:6px 0 0">${sub} ${nextSnow?'Következő hónap: '+dayName(nextSnow.t)+'.':'A következő 2 hétben nem látszik többségi havazás.'}</p>
+    <p style="margin:6px 0 0">${sub} ${nextSnow?'Következő havazás: '+dayName(nextSnow.t)+'.':'A következő 2 hétben nem látszik többségi havazás.'}</p>
     <div class="chips">
       <span class="chip ${frost?'f':''}">${z.frostModels}/${z.n} modell fagyot mutat</span>
       <span class="chip">Csapadék: ${fmt(z.precip,1)} mm</span>
