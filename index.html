@@ -83,7 +83,7 @@ body[data-fx="frost"]::before{content:"";position:fixed;inset:0;pointer-events:n
 </style>
 </head>
 <body>
-  <canvas id="fx" aria-hidden="true"></canvas>
+<canvas id="fx" aria-hidden="true"></canvas>
 <main>
 <h1>Fagy és hó figyelő</h1>
 <p class="sub">Több időjárási modell egyszerre: lesz-e ma fagy, mennyi csapadék jön, és havazhat-e.</p>
@@ -250,7 +250,13 @@ async function loadHourly(){
     const j=await (await fetch(u)).json();
     if(!j.hourly)throw new Error(j.reason||'nincs óránkénti adat');
     renderHourly(j.hourly,j.utc_offset_seconds||0);
-    try{fxFromHourly(j.hourly,j.utc_offset_seconds||0)}catch(e2){console.warn('Effekt hiba:',e2)}
+    try{
+      const mode=fxFromHourly(j.hourly,j.utc_offset_seconds||0);
+      box.insertAdjacentHTML('beforeend','<p class="hnote">Effekt: '+mode+'</p>'); // ideiglenes ellenőrzés
+    }catch(e2){
+      console.warn('Effekt hiba:',e2);
+      box.insertAdjacentHTML('beforeend','<p class="hnote" style="color:#e57373">Effekt hiba: '+esc(e2.message)+'</p>');
+    }
   }catch(e){
     box.hidden=false;
     box.innerHTML='<p class="hnote" style="padding:0 16px">Az óránkénti adat most nem érhető el. ('+esc(e.message)+')</p>';
