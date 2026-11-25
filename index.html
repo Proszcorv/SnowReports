@@ -248,11 +248,12 @@ async function loadHourly(){
   try{
     const u=`https://api.open-meteo.com/v1/forecast?latitude=${place.lat}&longitude=${place.lon}&hourly=temperature_2m,precipitation,snowfall,precipitation_probability,weather_code,is_day,wind_gusts_10m&forecast_days=1&timezone=auto`;
     const j=await (await fetch(u)).json();
-    if(!j.hourly)throw new Error();
-    renderHourly(j.hourly,j.utc_offset_seconds||0);fxFromHourly(j.hourly,j.utc_offset_seconds||0);
+    if(!j.hourly)throw new Error(j.reason||'nincs óránkénti adat');
+    renderHourly(j.hourly,j.utc_offset_seconds||0);
+    try{fxFromHourly(j.hourly,j.utc_offset_seconds||0)}catch(e2){console.warn('Effekt hiba:',e2)}
   }catch(e){
     box.hidden=false;
-    box.innerHTML='<p class="hnote" style="padding:0 16px">Az óránkénti adat most nem érhető el.</p>';
+    box.innerHTML='<p class="hnote" style="padding:0 16px">Az óránkénti adat most nem érhető el. ('+esc(e.message)+')</p>';
   }
 }
 $('#tm').value=store.get('time')||'07:00';
