@@ -61,6 +61,13 @@ button.ghost{background:var(--card);color:var(--ink);border-color:var(--line)}
 .ps{font-size:12px;color:var(--mute)}
 .hr.sn .ps{color:var(--snow);font-weight:600}
 .hnote{color:var(--mute);font-size:12px;margin:4px 16px 8px}
+.hscroll::-webkit-scrollbar{height:8px}
+.hscroll::-webkit-scrollbar-track{background:var(--frostbg);border-radius:8px;margin:0 16px}
+.hscroll::-webkit-scrollbar-thumb{background:var(--frost);border-radius:8px}
+.hscroll::-webkit-scrollbar-thumb:hover{background:var(--snow)}
+@supports not selector(::-webkit-scrollbar){
+  .hscroll{scrollbar-width:thin;scrollbar-color:var(--frost) var(--frostbg)}
+}
 </style>
 </head>
 <body>
@@ -141,14 +148,14 @@ function render(days){
     <div class="chips">
       <span class="chip ${frost?'f':''}">${z.frostModels}/${z.n} modell fagyot mutat</span>
       <span class="chip">Csapadék: ${fmt(z.precip,1)} mm</span>
-      <span class="chip ${snowy?'s':''}">Hó: ${z.snowModels}/${z.snowN} modell</span>
+      <span class="chip ${snowy?'s':''}">Hó: ${z.snowModels}/${z.snowN} modell${z.snowCm>=0.1?' · ~'+fmt(z.snowCm,1)+' cm':''}</span>
     </div>`;
   $('#days').innerHTML=days.map(x=>{
     const f=x.min!==null&&x.min<0,s=x.snowN&&x.snowModels>=Math.ceil(x.snowN/2);
     return `<div class="day ${f?'frost':''} ${s?'snow':''}">
       <div class="d">${dayName(x.t,true)}<small>${dayName(x.t,false,true)}</small></div>
       <div class="t"><b>${fmt(x.min)}°</b><span>${fmt(x.lo)}_${fmt(x.hi)}° · ${x.frostModels}/${x.n} fagy</span></div>
-      <div class="p"><b>${fmt(x.precip,1)} mm</b><br>${x.snowModels>0?'hó '+x.snowModels+'/'+x.snowN+' modell':'nincs hó'}</div>
+      <div class="p"><b>${fmt(x.precip,1)} mm</b><br>${x.snowModels>0?(x.snowCm>=0.1?'❄ ~'+fmt(x.snowCm,1)+' cm<br>':'')+'hó '+x.snowModels+'/'+x.snowN+' modell':'nincs hó'}</div>
     </div>`}).join('');
   summary=`${place.name}: ma min. ${fmt(z.min)} °C, csapadék ${fmt(z.precip,1)} mm, `+(snowy?'havazás valószínű.':z.snowModels>0?'hó lehetséges ('+z.snowModels+'/'+z.snowN+' modell).':'hó nem várható.');
   maybeNotify();
